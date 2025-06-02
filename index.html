@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>WJMO Fuego</title>
+  <style>
+    body {
+      margin: 0;
+      background: #121212;
+      font-family: 'Segoe UI', sans-serif;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 3rem;
+      margin-bottom: 20px;
+      color: #ff6b6b;
+      text-shadow: 0 0 15px rgba(255, 107, 107, 0.4);
+    }
+
+    .player-container {
+      background: #1f1f1f;
+      border-radius: 20px;
+      padding: 30px 40px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+      width: 90%;
+      max-width: 600px;
+    }
+
+    .btn-play {
+      background: #ff6b6b;
+      border: none;
+      color: #fff;
+      font-size: 1.2rem;
+      padding: 10px 25px;
+      border-radius: 30px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+      box-shadow: 0 0 10px rgba(255, 107, 107, 0.4);
+      margin-top: 15px;
+    }
+
+    .btn-play:hover {
+      background: #ff4f4f;
+    }
+
+    canvas {
+      margin-top: 25px;
+      width: 100%;
+      height: 150px;
+      background-color: #000;
+      border-radius: 12px;
+      box-shadow: 0 0 10px #000;
+      transform-origin: center bottom;
+      transition: transform 0.1s ease-out;
+    }
+
+    footer {
+      margin-top: 40px;
+      font-size: 0.9rem;
+      color: #777;
+      opacity: 0.6;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>WJMO Fuego</h1>
+
+  <div class="player-container">
+    <canvas id="oscilloscope" width="600" height="150"></canvas>
+    <button id="playBtn" class="btn-play">unmute</button>
+  </div>
+
+  <audio id="audio" autoplay muted crossorigin="anonymous">
+    <source src="https://playerservices.streamtheworld.com/api/livestream-redirect/WJMOAMAAC.aac" type="audio/mpeg">
+    Your browser does not support the audio element.
+  </audio>
+
+  <script>
+    const audio = document.getElementById('audio');
+    const playBtn = document.getElementById('playBtn');
+    const canvas = document.getElementById('oscilloscope');
+    const canvasCtx = canvas.getContext('2d');
+
+    let audioCtx, analyser, source, dataArray, bufferLength;
+    let prevDataArray;
+
+    function setupOscilloscope() {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      source = audioCtx.createMediaElementSource(audio);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+      bufferLength = analyser.fftSize;
+      dataArray = new Uint8Array(bufferLength);
+      prevDataArray = new Float32Array(bufferLength);
+
+      source.connect(analyser);
+      analyser.connect(audioCtx.destination);
+
+      draw();
+    }
+
+    function draw() {
+      requestAnimationFrame(draw);
+      analyser.getByteTimeDomainData(dataArray);
+
+      for(let i = 0; i < bufferLength; i++){
+        let normalized = dataArray[i] / 128 - 1; 
+        prevDataArray[i] = prevDataArray[i] * 0.8 + normalized * 0.2;
+      }
+
+      canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const gradient = canvasCtx.createLinearGradient(0, 0, canvas.width, 0);
+      gradient.addColorStop(0, '#ff6b6b');
+      gradient.addColorStop(0.5, '#ffcc70');
+      gradient.addColorStop(1, '#ff6bd1');
+
+      canvasCtx.lineWidth = 3;
+      canvasCtx.strokeStyle = gradient;
+
+      canvasCtx.beginPath();
+
+      const sliceWidth = canvas.width / bufferLength;
+      let x = 0;
+
+      for (let i = 0; i < bufferLength; i++) {
+        const v = prevDataArray[i];
+        const y = (v + 1) * canvas.height / 2;
+
+        if (i === 0) {
+          canvasCtx.moveTo(x, y);
+        } else {
+          canvasCtx.lineTo(x, y);
+        }
+
+        x += sliceWidth;
+      }
+
+      canvasCtx.stroke();
+
+      let sum = 0;
+      for(let i = 0; i < bufferLength; i++){
+        sum += Math.abs(prevDataArray[i]);
+      }
+      let avg = sum / bufferLength;
+
+      let glow = Math.min(avg * 30, 5);
+      canvas.style.boxShadow = `0 0 ${glow * 10}px rgba(255, 107, 107, 0.7)`;
+
+      let scale = 1 + Math.min(avg * 0.3, 0.15);
+      canvas.style.transform = `scale(${scale})`;
+    }
+
+    playBtn.addEventListener('click', () => {
+      if (!audioCtx) setupOscilloscope();
+
+      if (audio.muted) {
+        audio.muted = false;
+        playBtn.textContent = 'mute';
+      } else {
+        audio.muted = true;
+        playBtn.textContent = 'unmute';
+      }
+    });
+
+    window.addEventListener('load', () => {
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    });
+  </script>
+
+</body>
+</html>
